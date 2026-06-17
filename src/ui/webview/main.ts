@@ -73,11 +73,23 @@ function getColumns(): readonly ColumnDef[] {
   return store.getState().data?.columns ?? [];
 }
 
+// Cached search state — recomputed only when search/sort/data changes, NOT on scroll
+let cachedMatchMap: ReadonlyMap<number, ReadonlySet<string>> = new Map();
+let cachedOriginalIndexMap: Map<TableRow, number> = new Map();
+
 function recomputeDisplayedRows(): void {
   const { data, searchQuery, sortColumn, sortAsc } = store.getState();
   if (!data) {
     store.dispatch({ type: "setDisplayedRows", rows: [] });
+    cachedMatchMap = new Map();
+    cachedOriginalIndexMap = new Map();
     return;
+  }
+
+  // Build O(1) lookup for original row indices
+  cachedOriginalIndexMap = new Map();
+  for (let i = 0; i < data.rows.length; i++) {
+    cachedOriginalIndexMap.set(data.rows[i], i);
   }
 
   let rows: readonly TableRow[] = data.rows;
@@ -85,6 +97,9 @@ function recomputeDisplayedRows(): void {
   if (searchQuery) {
     const result = searchRows(rows, searchQuery);
     rows = result.matchedIndices.map((i) => data.rows[i]);
+    cachedMatchMap = result.matchMap;
+  } else {
+    cachedMatchMap = new Map();
   }
 
   if (sortColumn) {
@@ -117,12 +132,11 @@ function renderVisibleRows(): void {
   viewport.innerHTML = "";
 
   const lineNumWidth = computeLineNumWidth(state.data?.totalLines ?? 0);
-  const searchResult = state.searchQuery ? searchRows(state.data?.rows ?? [], state.searchQuery) : undefined;
 
   for (let i = range.start; i < range.end; i++) {
     const row = rows[i];
-    const originalIndex = state.data?.rows.indexOf(row) ?? i;
-    const matchedCells = searchResult?.matchMap.get(originalIndex);
+    const originalIndex = cachedOriginalIndexMap.get(row) ?? i;
+    const matchedCells = cachedMatchMap.get(originalIndex);
 
     const rowEl = renderRow(
       row,
@@ -376,6 +390,8 @@ function showCopiedTooltip(): void {
 }
 
 // --- Message handling ---
+let initialScrollRestored = false;
+
 window.addEventListener("message", (event: MessageEvent<ToWebviewMessage>) => {
   const msg = event.data;
   switch (msg.type) {
@@ -384,7 +400,8 @@ window.addEventListener("message", (event: MessageEvent<ToWebviewMessage>) => {
       store.dispatch({ type: "setData", data: msg.data });
       recomputeDisplayedRows();
 
-      if (persisted?.scrollTop) {
+      if (!initialScrollRestored && persisted?.scrollTop) {
+        initialScrollRestored = true;
         requestAnimationFrame(() => {
           scrollContainer.scrollTop = persisted.scrollTop;
         });
@@ -397,8 +414,6 @@ window.addEventListener("message", (event: MessageEvent<ToWebviewMessage>) => {
       break;
     case "loading":
       showLoading(loadingState, loadingText, msg.fileName, msg.lineCount);
-      break;
-    case "searchResult":
       break;
   }
 });
