@@ -12,19 +12,13 @@ export type TableData = {
   readonly errorCount: number;
 };
 
-export type SearchResult = {
-  readonly filteredRows: readonly TableRow[];
-  readonly matchCount: number;
-};
-
 export type ToWebviewMessage =
   | { readonly type: "update"; readonly data: TableData }
   | { readonly type: "clear" }
-  | { readonly type: "searchResult"; readonly data: SearchResult };
+  | { readonly type: "loading"; readonly fileName: string; readonly lineCount: number };
 
 export type FromWebviewMessage =
   | { readonly type: "copyValue"; readonly value: string }
   | { readonly type: "copyRow"; readonly lineNumber: number }
   | { readonly type: "goToLine"; readonly lineNumber: number }
-  | { readonly type: "search"; readonly query: string }
   | { readonly type: "ready" };
