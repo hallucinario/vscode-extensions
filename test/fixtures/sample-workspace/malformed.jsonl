@@ -1,0 +1,5 @@
+{"id":1,"name":"Alice"}
+{invalid json here
+{"id":3,"name":"Charlie"}
+not json at all
+{"id":5,"name":"Eve"}
