@@ -3,7 +3,7 @@
   "displayName": "JSONL Viewer",
   "description": "Rich JSONL file viewer with Tree View explorer and interactive table Webview",
   "publisher": "hallucinario",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.100.0"
   },
