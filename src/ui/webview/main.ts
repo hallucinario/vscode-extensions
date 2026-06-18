@@ -11,6 +11,7 @@ import { renderRow } from "./render/row.js";
 import { renderDetailContent, getDetailRowJson } from "./render/detailPanel.js";
 import { formatStatus } from "./render/statusBar.js";
 import { showEmptyState, hideEmptyState, showLoading, hideLoading } from "./render/emptyState.js";
+import { computeTotalRowWidth } from "./core/columnLayout.js";
 
 const ROW_HEIGHT = 28;
 const OVERSCAN = 10;
@@ -112,6 +113,18 @@ function recomputeDisplayedRows(): void {
 // --- Virtual Scroll ---
 let lastRenderedRange = { start: -1, end: -1 };
 
+// Cached layout values — recomputed only in renderAll(), not on scroll
+let cachedGridWidth = 0;
+let cachedHeaderHeight = 0;
+
+function updateCachedLayout(): void {
+  const state = store.getState();
+  const columns = getColumns();
+  const lineNumPx = headerRow.querySelector(".line-num-col")?.getBoundingClientRect().width ?? 40;
+  cachedGridWidth = computeTotalRowWidth(lineNumPx, columns, state.columnWidths);
+  cachedHeaderHeight = headerRow.offsetHeight;
+}
+
 function renderVisibleRows(): void {
   const state = store.getState();
   const rows = state.displayedRows;
@@ -119,7 +132,7 @@ function renderVisibleRows(): void {
 
   const range = computeVisibleRange({
     scrollTop: scrollContainer.scrollTop,
-    containerHeight: scrollContainer.clientHeight,
+    containerHeight: scrollContainer.clientHeight - cachedHeaderHeight,
     rowHeight: ROW_HEIGHT,
     totalCount: rows.length,
     overscan: OVERSCAN,
@@ -128,7 +141,10 @@ function renderVisibleRows(): void {
   if (range.start === lastRenderedRange.start && range.end === lastRenderedRange.end) return;
   lastRenderedRange = range;
 
-  sentinel.style.height = `${computeSentinelHeight(rows.length, ROW_HEIGHT)}px`;
+  sentinel.style.height = `${computeSentinelHeight(rows.length, ROW_HEIGHT) + cachedHeaderHeight}px`;
+  sentinel.style.minWidth = `${cachedGridWidth}px`;
+  viewport.style.top = `${cachedHeaderHeight}px`;
+  viewport.style.minWidth = `${cachedGridWidth}px`;
   viewport.innerHTML = "";
 
   const lineNumWidth = computeLineNumWidth(state.data?.totalLines ?? 0);
@@ -152,7 +168,7 @@ function renderVisibleRows(): void {
     );
     rowEl.style.position = "absolute";
     rowEl.style.top = `${computeRowTop(i, ROW_HEIGHT)}px`;
-    rowEl.style.width = "100%";
+    rowEl.style.minWidth = `${cachedGridWidth}px`;
     rowEl.style.height = `${ROW_HEIGHT}px`;
     viewport.appendChild(rowEl);
   }
@@ -355,6 +371,9 @@ function renderAll(): void {
     column: state.sortColumn,
     asc: state.sortAsc,
   }, lineNumWidth, state.columnWidths, handleSort);
+
+  updateCachedLayout();
+  headerRow.style.minWidth = `${cachedGridWidth}px`;
 
   gridEl.setAttribute("aria-rowcount", String(rows.length));
   gridEl.setAttribute("aria-colcount", String(data.columns.length + 1));

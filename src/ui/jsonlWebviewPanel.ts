@@ -181,8 +181,9 @@ export class JsonlWebviewPanel {
     </div>
     <div id="grid-area">
       <div id="grid" role="grid" aria-label="JSONL data table" tabindex="0">
-        <div id="header-row" class="header-row"></div>
-        <div id="scroll-container"></div>
+        <div id="scroll-container">
+          <div id="header-row" class="header-row"></div>
+        </div>
       </div>
     </div>
     <div id="resize-handle" class="horizontal-resize"></div>

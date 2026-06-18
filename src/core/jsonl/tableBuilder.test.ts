@@ -121,11 +121,11 @@ describe("buildTable", () => {
     const table = buildTable(result);
     const row = table.rows[0];
     if (row.kind === "ok") {
-      expect(row.cells["text"].display.length).toBeLessThan(200);
+      expect(row.cells["text"].display.length).toBeLessThanOrEqual(201);
     }
   });
 
-  it('shows "{...}" display for object cell values', () => {
+  it("shows object preview with key-value pairs", () => {
     const result: ParseResult = {
       lines: [
         { kind: "ok", lineNumber: 1, raw: '{"nested":{"x":1}}', data: { nested: { x: 1 } } },
@@ -136,11 +136,11 @@ describe("buildTable", () => {
     const table = buildTable(result);
     const row = table.rows[0];
     if (row.kind === "ok") {
-      expect(row.cells["nested"].display).toBe("{...}");
+      expect(row.cells["nested"].display).toBe("{x: 1}");
     }
   });
 
-  it('shows "[N items]" display for array cell values', () => {
+  it("shows array preview with item values", () => {
     const result: ParseResult = {
       lines: [
         { kind: "ok", lineNumber: 1, raw: '{"items":[1,2,3]}', data: { items: [1, 2, 3] } },
@@ -151,7 +151,101 @@ describe("buildTable", () => {
     const table = buildTable(result);
     const row = table.rows[0];
     if (row.kind === "ok") {
-      expect(row.cells["items"].display).toBe("[3 items]");
+      expect(row.cells["items"].display).toBe("[1, 2, 3]");
+    }
+  });
+
+  it("truncates object preview after 3 keys", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "{}", data: { wrapper: { a: 1, b: 2, c: 3, d: 4, e: 5 } } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      const display = row.cells["wrapper"].display;
+      expect(display).toContain("a: 1");
+      expect(display).toContain("…");
+      expect(display).not.toContain("d:");
+    }
+  });
+
+  it("truncates array preview after 3 items", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "[]", data: { items: [10, 20, 30, 40, 50] } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      const display = row.cells["items"].display;
+      expect(display).toBe("[10, 20, 30, …]");
+    }
+  });
+
+  it("shows empty object as {}", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "{}", data: { obj: {} } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      expect(row.cells["obj"].display).toBe("{}");
+    }
+  });
+
+  it("shows empty array as []", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "[]", data: { arr: [] } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      expect(row.cells["arr"].display).toBe("[]");
+    }
+  });
+
+  it("shows nested objects within preview as {N}", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "{}", data: { outer: { inner: { deep: 1 } } } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      expect(row.cells["outer"].display).toBe("{inner: {1}}");
+    }
+  });
+
+  it("shows nested arrays within preview as [N]", () => {
+    const result: ParseResult = {
+      lines: [
+        { kind: "ok", lineNumber: 1, raw: "{}", data: { outer: { tags: [1, 2, 3] } } },
+      ],
+      totalLines: 1,
+      errorCount: 0,
+    };
+    const table = buildTable(result);
+    const row = table.rows[0];
+    if (row.kind === "ok") {
+      expect(row.cells["outer"].display).toBe("{tags: [3]}");
     }
   });
 

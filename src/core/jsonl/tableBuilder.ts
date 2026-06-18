@@ -1,9 +1,23 @@
 import type { CellValue, ColumnDef, JsonValue, ParseResult, TableData, TableRow } from "./types.js";
 
-const MAX_DISPLAY_LENGTH = 100;
+const MAX_DISPLAY_LENGTH = 200;
+const PREVIEW_KEY_COUNT = 3;
+const PREVIEW_ITEM_COUNT = 3;
 
 function isPlainObject(v: JsonValue): v is { readonly [key: string]: JsonValue } {
   return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function formatDisplayShort(value: JsonValue): string {
+  if (value === null) return "null";
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (typeof value === "string") {
+    if (value.length > 30) return `"${value.slice(0, 27)}…"`;
+    return `"${value}"`;
+  }
+  if (Array.isArray(value)) return `[${value.length}]`;
+  if (isPlainObject(value)) return `{${Object.keys(value).length}}`;
+  return String(value);
 }
 
 function formatDisplay(value: JsonValue): string {
@@ -15,8 +29,20 @@ function formatDisplay(value: JsonValue): string {
     }
     return value;
   }
-  if (Array.isArray(value)) return `[${value.length} items]`;
-  if (isPlainObject(value)) return "{...}";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.slice(0, PREVIEW_ITEM_COUNT).map(formatDisplayShort);
+    const suffix = value.length > PREVIEW_ITEM_COUNT ? ", …" : "";
+    return `[${items.join(", ")}${suffix}]`;
+  }
+  if (isPlainObject(value)) {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return "{}";
+    const shown = keys.slice(0, PREVIEW_KEY_COUNT);
+    const entries = shown.map((k) => `${k}: ${formatDisplayShort(value[k])}`);
+    const suffix = keys.length > PREVIEW_KEY_COUNT ? ", …" : "";
+    return `{${entries.join(", ")}${suffix}}`;
+  }
   return String(value);
 }
 
