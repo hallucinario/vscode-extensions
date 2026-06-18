@@ -200,6 +200,42 @@ body {
   background: var(--vscode-list-activeSelectionBackground);
 }
 
+/* --- Nested Value Type Badges --- */
+.cell-object, .cell-array {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--vscode-editor-fontFamily, monospace);
+  font-size: 0.75em;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.obj-badge {
+  color: var(--vscode-symbolIcon-objectForeground, #75beff);
+  background: rgba(117, 190, 255, 0.12);
+}
+
+.arr-badge {
+  color: var(--vscode-symbolIcon-arrayForeground, #cc8cf2);
+  background: rgba(204, 140, 242, 0.12);
+}
+
+.cell-object > span:last-child,
+.cell-array > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* --- Error Rows --- */
 .error-row { background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.08)); }
 .error-row:hover { background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.14)); }

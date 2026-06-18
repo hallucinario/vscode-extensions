@@ -1,5 +1,6 @@
 import type { TableRow, ColumnDef } from "../types.js";
 import { DEFAULT_COLUMN_WIDTH } from "../core/columnLayout.js";
+import { getCellType } from "../core/cellType.js";
 
 export function renderRow(
   row: TableRow,
@@ -54,7 +55,29 @@ export function renderRow(
       cellEl.style.flexShrink = "0";
 
       const display = cell?.display ?? "";
-      cellEl.textContent = display;
+      const cellType = cell ? getCellType(cell.raw) : "empty";
+
+      if (cellType === "object") {
+        cellEl.classList.add("cell-object");
+        const badge = document.createElement("span");
+        badge.classList.add("type-badge", "obj-badge");
+        badge.textContent = "{}";
+        cellEl.appendChild(badge);
+        const textNode = document.createElement("span");
+        textNode.textContent = display.startsWith("{") ? display.slice(1, -1) : display;
+        cellEl.appendChild(textNode);
+      } else if (cellType === "array") {
+        cellEl.classList.add("cell-array");
+        const badge = document.createElement("span");
+        badge.classList.add("type-badge", "arr-badge");
+        badge.textContent = "[]";
+        cellEl.appendChild(badge);
+        const textNode = document.createElement("span");
+        textNode.textContent = display.startsWith("[") ? display.slice(1, -1) : display;
+        cellEl.appendChild(textNode);
+      } else {
+        cellEl.textContent = display;
+      }
       cellEl.title = cell ? JSON.stringify(cell.raw) : "";
 
       if (matchedCells?.has(col.key)) {

@@ -11,7 +11,7 @@ import { renderRow } from "./render/row.js";
 import { renderDetailContent, getDetailRowJson } from "./render/detailPanel.js";
 import { formatStatus } from "./render/statusBar.js";
 import { showEmptyState, hideEmptyState, showLoading, hideLoading } from "./render/emptyState.js";
-import { computeTotalRowWidth } from "./core/columnLayout.js";
+import { computeTotalRowWidth, autoFitColumnWidths } from "./core/columnLayout.js";
 
 const ROW_HEIGHT = 28;
 const OVERSCAN = 10;
@@ -366,11 +366,19 @@ function renderAll(): void {
   hideLoading(loadingState);
   gridEl.classList.remove("hidden");
 
+  // Auto-fit column widths from content, preserving user-resized widths
+  const autoWidths = autoFitColumnWidths(data.rows, data.columns);
+  for (const [key, width] of Object.entries(autoWidths)) {
+    if (!(key in state.columnWidths)) {
+      store.dispatch({ type: "setColumnWidth", key, width });
+    }
+  }
+
   const lineNumWidth = computeLineNumWidth(data.totalLines);
   renderHeader(headerRow, data.columns, {
     column: state.sortColumn,
     asc: state.sortAsc,
-  }, lineNumWidth, state.columnWidths, handleSort);
+  }, lineNumWidth, store.getState().columnWidths, handleSort);
 
   updateCachedLayout();
   headerRow.style.minWidth = `${cachedGridWidth}px`;
