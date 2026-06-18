@@ -1,0 +1,116 @@
+version: "3"
+
+vars:
+  VSIX_DIR: dist-vsix
+  EXT_NAME: jsonl-viewer
+  EXT_VERSION:
+    sh: jq -r .version package.json
+
+tasks:
+  # ---------- Development ----------
+
+  dev:
+    desc: Start esbuild watch mode for both extension + webview
+    cmds:
+      - pnpm run bundle:watch
+
+  # ---------- Quality Gates ----------
+
+  typecheck:
+    desc: Run TypeScript type checking (extension + webview)
+    cmds:
+      - pnpm run typecheck
+
+  lint:
+    desc: Run ESLint
+    cmds:
+      - pnpm run lint
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - pnpm run test:unit
+
+  test:watch:
+    desc: Run unit tests in watch mode
+    cmds:
+      - pnpm run test:unit:watch
+
+  test:integration:
+    desc: Run integration tests in Extension Development Host
+    cmds:
+      - pnpm run test:integration
+
+  check:
+    desc: Full quality gate (typecheck + lint + test + bundle)
+    cmds:
+      - pnpm run check
+
+  # ---------- Build ----------
+
+  bundle:
+    desc: Build extension + webview bundles
+    cmds:
+      - pnpm run bundle
+
+  bundle:prod:
+    desc: Build minified production bundles
+    cmds:
+      - pnpm run bundle:prod
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - pnpm run clean
+
+  # ---------- Package & Install ----------
+
+  package:
+    desc: Run full check + package VSIX
+    deps: [check]
+    cmds:
+      - mkdir -p {{.VSIX_DIR}}
+      - pnpm exec vsce package --out {{.VSIX_DIR}}
+    generates:
+      - "{{.VSIX_DIR}}/{{.EXT_NAME}}-{{.EXT_VERSION}}.vsix"
+
+  install:
+    desc: Install the VSIX into VS Code (run after 'task package')
+    deps: [package]
+    cmds:
+      - code --install-extension {{.VSIX_DIR}}/{{.EXT_NAME}}-{{.EXT_VERSION}}.vsix --force
+      - echo ""
+      - echo "✓ Installed {{.EXT_NAME}} v{{.EXT_VERSION}}"
+      - echo "  Cmd+Shift+P then 'Developer Reload Window' to activate"
+
+  uninstall:
+    desc: Uninstall the extension from VS Code
+    cmds:
+      - code --uninstall-extension hallucinario.{{.EXT_NAME}}
+      - echo "✓ Uninstalled hallucinario.{{.EXT_NAME}}"
+
+  # ---------- Ship (build → package → install in one step) ----------
+
+  ship:
+    desc: Full pipeline — check, package, install VSIX, ready to Reload
+    cmds:
+      - task: install
+
+  # ---------- Convenience ----------
+
+  version:
+    desc: Show current extension version
+    cmds:
+      - echo "{{.EXT_NAME}} v{{.EXT_VERSION}}"
+
+  info:
+    desc: Show installed extension info
+    cmds:
+      - echo "=== Installed ==="
+      - ls -la ~/.vscode/extensions/*{{.EXT_NAME}}* 2>/dev/null || echo "Not installed"
+      - echo ""
+      - echo "=== Source version ==="
+      - echo "{{.EXT_NAME}} v{{.EXT_VERSION}}"
+      - echo ""
+      - echo "=== dist timestamps ==="
+      - ls -la dist/extension.js dist/webview.js dist/webview.css 2>/dev/null || echo "No dist/ — run 'task bundle'"
