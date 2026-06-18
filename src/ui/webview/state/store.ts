@@ -10,6 +10,7 @@ export type WebviewState = {
   columnWidths: Record<string, number>;
   detailOpen: boolean;
   scrollTop: number;
+  expandedRows: ReadonlySet<number>;
 };
 
 export type StoreAction =
@@ -20,7 +21,9 @@ export type StoreAction =
   | { type: "selectRow"; index: number }
   | { type: "setColumnWidth"; key: string; width: number }
   | { type: "setDetailOpen"; open: boolean }
-  | { type: "setScrollTop"; scrollTop: number };
+  | { type: "setScrollTop"; scrollTop: number }
+  | { type: "toggleRowExpanded"; index: number }
+  | { type: "collapseAllRows" };
 
 type Listener = (state: WebviewState) => void;
 
@@ -41,6 +44,7 @@ function initialState(): WebviewState {
     columnWidths: {},
     detailOpen: false,
     scrollTop: 0,
+    expandedRows: new Set(),
   };
 }
 
@@ -55,6 +59,7 @@ function reduce(state: WebviewState, action: StoreAction): WebviewState {
         sortAsc: true,
         selectedRowIndex: -1,
         searchQuery: "",
+        expandedRows: new Set(),
       };
     case "setDisplayedRows":
       return { ...state, displayedRows: action.rows };
@@ -73,6 +78,17 @@ function reduce(state: WebviewState, action: StoreAction): WebviewState {
       return { ...state, detailOpen: action.open };
     case "setScrollTop":
       return { ...state, scrollTop: action.scrollTop };
+    case "toggleRowExpanded": {
+      const next = new Set(state.expandedRows);
+      if (next.has(action.index)) {
+        next.delete(action.index);
+      } else {
+        next.add(action.index);
+      }
+      return { ...state, expandedRows: next };
+    }
+    case "collapseAllRows":
+      return { ...state, expandedRows: new Set() };
   }
 }
 

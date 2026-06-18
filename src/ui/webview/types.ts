@@ -12,8 +12,12 @@ export type TableData = {
   readonly errorCount: number;
 };
 
+export type ParsedLineMsg =
+  | { readonly kind: "ok"; readonly lineNumber: number; readonly raw: string; readonly data: unknown }
+  | { readonly kind: "error"; readonly lineNumber: number; readonly raw: string; readonly errorMessage: string };
+
 export type ToWebviewMessage =
-  | { readonly type: "update"; readonly data: TableData }
+  | { readonly type: "update"; readonly data: TableData; readonly parsedLines: readonly ParsedLineMsg[] }
   | { readonly type: "clear" }
   | { readonly type: "loading"; readonly fileName: string; readonly lineCount: number };
 
