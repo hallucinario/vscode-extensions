@@ -93,22 +93,23 @@ body {
 
 #grid {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   outline: none;
+  min-height: 0;
 }
 
 #grid:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 #grid.hidden { display: none; }
 
-/* --- Header Row --- */
+/* --- Header Row (sticky inside scroll-container) --- */
 .header-row {
   display: flex;
   flex-shrink: 0;
   background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
   border-bottom: 2px solid var(--vscode-panel-border, var(--vscode-widget-border, #444));
-  overflow: hidden;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .header-row .cell {
@@ -130,9 +131,9 @@ body {
 
 /* --- Scroll Container (Virtual Scroll) --- */
 #scroll-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
   position: relative;
 }
 
@@ -145,7 +146,6 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
 }
 
 /* --- Data Rows --- */
@@ -170,15 +170,34 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
-/* --- Line Number Column --- */
+/* --- Line Number Column (sticky left during horizontal scroll) --- */
 .line-num-col {
   color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
   text-align: right;
   font-variant-numeric: tabular-nums;
   user-select: none;
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.header-row .line-num-col {
+  z-index: 3;
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background));
+}
+
+.data-row .line-num-col {
+  background: var(--vscode-editor-background);
+}
+.data-row:hover .line-num-col {
+  background: var(--vscode-list-hoverBackground);
+}
+.data-row.selected .line-num-col {
+  background: var(--vscode-list-activeSelectionBackground);
 }
 
 /* --- Error Rows --- */

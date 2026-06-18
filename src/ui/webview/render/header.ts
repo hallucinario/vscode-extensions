@@ -1,4 +1,5 @@
 import type { ColumnDef } from "../types.js";
+import { DEFAULT_COLUMN_WIDTH } from "../core/columnLayout.js";
 
 export type SortState = {
   column: string | undefined;
@@ -30,14 +31,10 @@ export function renderHeader(
     el.classList.add("cell", "sortable");
     el.dataset.key = col.key;
 
-    const width = columnWidths[col.key];
-    if (width) {
-      el.style.width = `${width}px`;
-      el.style.minWidth = `${width}px`;
-    } else {
-      el.style.flex = "1";
-      el.style.minWidth = "80px";
-    }
+    const width = columnWidths[col.key] ?? DEFAULT_COLUMN_WIDTH;
+    el.style.width = `${width}px`;
+    el.style.minWidth = `${width}px`;
+    el.style.flexShrink = "0";
 
     const label = document.createElement("span");
     label.textContent = col.label;

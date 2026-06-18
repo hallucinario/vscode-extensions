@@ -1,4 +1,5 @@
 import type { TableRow, ColumnDef } from "../types.js";
+import { DEFAULT_COLUMN_WIDTH } from "../core/columnLayout.js";
 
 export function renderRow(
   row: TableRow,
@@ -47,14 +48,10 @@ export function renderRow(
       cellEl.setAttribute("role", "gridcell");
       cellEl.classList.add("cell");
 
-      const width = columnWidths[col.key];
-      if (width) {
-        cellEl.style.width = `${width}px`;
-        cellEl.style.minWidth = `${width}px`;
-      } else {
-        cellEl.style.flex = "1";
-        cellEl.style.minWidth = "80px";
-      }
+      const width = columnWidths[col.key] ?? DEFAULT_COLUMN_WIDTH;
+      cellEl.style.width = `${width}px`;
+      cellEl.style.minWidth = `${width}px`;
+      cellEl.style.flexShrink = "0";
 
       const display = cell?.display ?? "";
       cellEl.textContent = display;
