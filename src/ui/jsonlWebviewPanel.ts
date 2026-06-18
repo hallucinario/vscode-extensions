@@ -58,6 +58,7 @@ export class JsonlWebviewPanel {
           this.panel.webview.postMessage({
             type: "update",
             data: this.currentTableData,
+            parsedLines: this.currentParsedLines,
           });
         }
       },
@@ -82,17 +83,21 @@ export class JsonlWebviewPanel {
     }
   }
 
+  private currentParsedLines: readonly import("../core/jsonl/types.js").ParsedLine[] = [];
+
   update(text: string): void {
     const parsed = parseJsonl(text);
     const table = buildTable(parsed);
     const maxLines = this.app.config().maxDisplayedLines;
     const rows = table.rows.slice(0, maxLines);
     this.currentTableData = { ...table, rows };
+    this.currentParsedLines = parsed.lines.slice(0, maxLines);
 
     if (this.panel) {
       this.panel.webview.postMessage({
         type: "update",
         data: this.currentTableData,
+        parsedLines: this.currentParsedLines,
       });
     }
   }
@@ -112,6 +117,7 @@ export class JsonlWebviewPanel {
           this.panel.webview.postMessage({
             type: "update",
             data: this.currentTableData,
+            parsedLines: this.currentParsedLines,
           });
         }
         break;
@@ -186,17 +192,7 @@ export class JsonlWebviewPanel {
         </div>
       </div>
     </div>
-    <div id="resize-handle" class="horizontal-resize"></div>
-    <div id="detail-panel" class="hidden" role="complementary" aria-label="Row detail" aria-hidden="true">
-      <div id="detail-header">
-        <span id="detail-title">Detail</span>
-        <div class="detail-actions">
-          <button id="detail-copy" class="icon-btn" title="Copy JSON" aria-label="Copy JSON">Copy</button>
-          <button id="detail-close" class="icon-btn" title="Close" aria-label="Close detail">&times;</button>
-        </div>
-      </div>
-      <div id="detail-content" tabindex="0"></div>
-    </div>
+    <!-- Detail panel removed — inline row expansion replaces it -->
     <div id="empty-state" class="empty-state hidden">
       <div class="empty-state-content">
         <div class="empty-icon">&#128196;</div>

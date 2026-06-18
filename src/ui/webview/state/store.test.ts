@@ -132,4 +132,37 @@ describe("createStore", () => {
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(1);
   });
+
+  it("dispatch toggleRowExpanded adds to expandedRows", () => {
+    const store = createStore();
+    store.dispatch({ type: "toggleRowExpanded", index: 3 });
+    expect(store.getState().expandedRows.has(3)).toBe(true);
+  });
+
+  it("dispatch toggleRowExpanded removes if already expanded", () => {
+    const store = createStore();
+    store.dispatch({ type: "toggleRowExpanded", index: 3 });
+    store.dispatch({ type: "toggleRowExpanded", index: 3 });
+    expect(store.getState().expandedRows.has(3)).toBe(false);
+  });
+
+  it("dispatch collapseAllRows clears expandedRows", () => {
+    const store = createStore();
+    store.dispatch({ type: "toggleRowExpanded", index: 1 });
+    store.dispatch({ type: "toggleRowExpanded", index: 5 });
+    store.dispatch({ type: "collapseAllRows" });
+    expect(store.getState().expandedRows.size).toBe(0);
+  });
+
+  it("setData clears expandedRows", () => {
+    const store = createStore();
+    store.dispatch({ type: "toggleRowExpanded", index: 2 });
+    store.dispatch({ type: "setData", data: makeTableData(3) });
+    expect(store.getState().expandedRows.size).toBe(0);
+  });
+
+  it("initial expandedRows is empty", () => {
+    const store = createStore();
+    expect(store.getState().expandedRows.size).toBe(0);
+  });
 });

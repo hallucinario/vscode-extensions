@@ -1,6 +1,10 @@
 import type { TableRow, ColumnDef } from "../types.js";
+import type { ParsedLine } from "../../../core/jsonl/types.js";
 import { DEFAULT_COLUMN_WIDTH } from "../core/columnLayout.js";
 import { getCellType } from "../core/cellType.js";
+import { renderInlineDetailHtml } from "./inlineDetail.js";
+
+export const EXPANSION_HEIGHT = 200;
 
 export function renderRow(
   row: TableRow,
@@ -9,11 +13,17 @@ export function renderRow(
   lineNumWidth: string,
   columnWidths: Record<string, number>,
   isSelected: boolean,
+  isExpanded: boolean,
+  parsedLine: ParsedLine | undefined,
   matchedCells: ReadonlySet<string> | undefined,
+  onToggle: (index: number) => void,
   onRowClick: (index: number) => void,
   onRowDblClick: (lineNumber: number) => void,
   onCellClick: (value: string) => void,
 ): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.classList.add("row-wrapper");
+
   const el = document.createElement("div");
   el.setAttribute("role", "row");
   el.setAttribute("aria-rowindex", String(row.lineNumber));
@@ -22,6 +32,16 @@ export function renderRow(
     el.classList.add("selected");
     el.setAttribute("aria-selected", "true");
   }
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.classList.add("expand-toggle");
+  toggleBtn.setAttribute("aria-expanded", String(isExpanded));
+  toggleBtn.textContent = isExpanded ? "▼" : "▶";
+  toggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onToggle(rowIndex);
+  });
+  el.appendChild(toggleBtn);
 
   const lineNumEl = document.createElement("div");
   lineNumEl.setAttribute("role", "gridcell");
@@ -99,5 +119,14 @@ export function renderRow(
   el.addEventListener("click", () => onRowClick(rowIndex));
   el.addEventListener("dblclick", () => onRowDblClick(row.lineNumber));
 
-  return el;
+  wrapper.appendChild(el);
+
+  if (isExpanded && parsedLine) {
+    const expansion = document.createElement("div");
+    expansion.classList.add("inline-detail");
+    expansion.innerHTML = renderInlineDetailHtml(parsedLine);
+    wrapper.appendChild(expansion);
+  }
+
+  return wrapper;
 }

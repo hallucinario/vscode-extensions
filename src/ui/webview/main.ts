@@ -1,14 +1,14 @@
-import type { ToWebviewMessage, FromWebviewMessage, TableRow, ColumnDef } from "./types.js";
+import type { ToWebviewMessage, FromWebviewMessage, TableRow, ColumnDef, ParsedLineMsg } from "./types.js";
+import type { ParsedLine } from "../../core/jsonl/types.js";
 import { createStore } from "./state/store.js";
 import { createPersistence } from "./state/persistence.js";
-import { computeVisibleRange, computeRowTop, computeSentinelHeight, computeScrollTopForIndex } from "./core/virtualScroll.js";
+import { computeRowTopVar, computeSentinelHeightVar, findRowAtScrollTop, computeRowHeight } from "./core/virtualScroll.js";
 import { searchRows } from "./core/search.js";
 import { sortRows } from "./core/sort.js";
 import { handleKeydown } from "./core/keyboardNav.js";
 import { copyRowAsJson, copyCellValue } from "./core/clipboard.js";
 import { renderHeader, computeLineNumWidth } from "./render/header.js";
-import { renderRow } from "./render/row.js";
-import { renderDetailContent, getDetailRowJson } from "./render/detailPanel.js";
+import { renderRow, EXPANSION_HEIGHT } from "./render/row.js";
 import { formatStatus } from "./render/statusBar.js";
 import { showEmptyState, hideEmptyState, showLoading, hideLoading } from "./render/emptyState.js";
 import { computeTotalRowWidth, autoFitColumnWidths } from "./core/columnLayout.js";
@@ -29,25 +29,20 @@ const statusEl = document.getElementById("status") as HTMLSpanElement;
 const headerRow = document.getElementById("header-row") as HTMLDivElement;
 const scrollContainer = document.getElementById("scroll-container") as HTMLDivElement;
 const gridEl = document.getElementById("grid") as HTMLDivElement;
-const detailPanel = document.getElementById("detail-panel") as HTMLDivElement;
-const detailTitle = document.getElementById("detail-title") as HTMLSpanElement;
-const detailContent = document.getElementById("detail-content") as HTMLDivElement;
-const detailClose = document.getElementById("detail-close") as HTMLButtonElement;
-const detailCopy = document.getElementById("detail-copy") as HTMLButtonElement;
 const emptyState = document.getElementById("empty-state") as HTMLDivElement;
 const loadingState = document.getElementById("loading-state") as HTMLDivElement;
 const loadingText = document.getElementById("loading-text") as HTMLParagraphElement;
-const resizeHandle = document.getElementById("resize-handle") as HTMLDivElement;
 
-// Sentinel for virtual scroll total height
 const sentinel = document.createElement("div");
 sentinel.classList.add("scroll-sentinel");
 scrollContainer.appendChild(sentinel);
 
-// Viewport for rendered rows
 const viewport = document.createElement("div");
 viewport.classList.add("scroll-viewport");
 scrollContainer.appendChild(viewport);
+
+// --- Parsed lines for inline expansion ---
+let currentParsedLines: readonly ParsedLineMsg[] = [];
 
 // --- Restore persisted state ---
 const persisted = persistence.restore();
@@ -60,7 +55,6 @@ if (persisted) {
   for (const [key, width] of Object.entries(persisted.columnWidths)) {
     store.dispatch({ type: "setColumnWidth", key, width });
   }
-  if (persisted.detailOpen) store.dispatch({ type: "setDetailOpen", open: true });
   if (persisted.scrollTop) store.dispatch({ type: "setScrollTop", scrollTop: persisted.scrollTop });
   if (persisted.selectedRowIndex >= 0) store.dispatch({ type: "selectRow", index: persisted.selectedRowIndex });
 }
@@ -74,7 +68,16 @@ function getColumns(): readonly ColumnDef[] {
   return store.getState().data?.columns ?? [];
 }
 
-// Cached search state — recomputed only when search/sort/data changes, NOT on scroll
+function getExpandedIndicesSorted(): number[] {
+  return [...store.getState().expandedRows].sort((a, b) => a - b);
+}
+
+function getParsedLineForRow(row: TableRow): ParsedLine | undefined {
+  const line = currentParsedLines.find((l) => l.lineNumber === row.lineNumber);
+  return line as ParsedLine | undefined;
+}
+
+// Cached search state
 let cachedMatchMap: ReadonlyMap<number, ReadonlySet<string>> = new Map();
 let cachedOriginalIndexMap: Map<TableRow, number> = new Map();
 
@@ -87,7 +90,6 @@ function recomputeDisplayedRows(): void {
     return;
   }
 
-  // Build O(1) lookup for original row indices
   cachedOriginalIndexMap = new Map();
   for (let i = 0; i < data.rows.length; i++) {
     cachedOriginalIndexMap.set(data.rows[i], i);
@@ -110,10 +112,8 @@ function recomputeDisplayedRows(): void {
   store.dispatch({ type: "setDisplayedRows", rows });
 }
 
-// --- Virtual Scroll ---
+// --- Virtual Scroll (variable height) ---
 let lastRenderedRange = { start: -1, end: -1 };
-
-// Cached layout values — recomputed only in renderAll(), not on scroll
 let cachedGridWidth = 0;
 let cachedHeaderHeight = 0;
 
@@ -129,47 +129,55 @@ function renderVisibleRows(): void {
   const state = store.getState();
   const rows = state.displayedRows;
   const columns = getColumns();
+  const expandedIndices = getExpandedIndicesSorted();
+  const expandedSet = state.expandedRows;
 
-  const range = computeVisibleRange({
-    scrollTop: scrollContainer.scrollTop,
-    containerHeight: scrollContainer.clientHeight - cachedHeaderHeight,
-    rowHeight: ROW_HEIGHT,
-    totalCount: rows.length,
-    overscan: OVERSCAN,
-  });
-
-  if (range.start === lastRenderedRange.start && range.end === lastRenderedRange.end) return;
-  lastRenderedRange = range;
-
-  sentinel.style.height = `${computeSentinelHeight(rows.length, ROW_HEIGHT) + cachedHeaderHeight}px`;
+  const totalHeight = computeSentinelHeightVar(rows.length, ROW_HEIGHT, EXPANSION_HEIGHT, expandedSet.size);
+  sentinel.style.height = `${totalHeight + cachedHeaderHeight}px`;
   sentinel.style.minWidth = `${cachedGridWidth}px`;
   viewport.style.top = `${cachedHeaderHeight}px`;
   viewport.style.minWidth = `${cachedGridWidth}px`;
-  viewport.innerHTML = "";
 
+  const scrollTop = scrollContainer.scrollTop;
+  const containerHeight = scrollContainer.clientHeight - cachedHeaderHeight;
+
+  const startRow = findRowAtScrollTop(scrollTop, rows.length, ROW_HEIGHT, EXPANSION_HEIGHT, expandedIndices);
+  let endRow = startRow;
+  let accHeight = 0;
+  while (endRow < rows.length && accHeight < containerHeight + OVERSCAN * ROW_HEIGHT) {
+    accHeight += computeRowHeight(endRow, ROW_HEIGHT, EXPANSION_HEIGHT, expandedSet);
+    endRow++;
+  }
+  endRow = Math.min(rows.length, endRow + OVERSCAN);
+  const adjustedStart = Math.max(0, startRow - OVERSCAN);
+
+  if (adjustedStart === lastRenderedRange.start && endRow === lastRenderedRange.end) return;
+  lastRenderedRange = { start: adjustedStart, end: endRow };
+
+  viewport.innerHTML = "";
   const lineNumWidth = computeLineNumWidth(state.data?.totalLines ?? 0);
 
-  for (let i = range.start; i < range.end; i++) {
+  for (let i = adjustedStart; i < endRow; i++) {
     const row = rows[i];
     const originalIndex = cachedOriginalIndexMap.get(row) ?? i;
     const matchedCells = cachedMatchMap.get(originalIndex);
+    const isExpanded = expandedSet.has(i);
+    const parsedLine = isExpanded ? getParsedLineForRow(row) : undefined;
 
     const rowEl = renderRow(
-      row,
-      columns,
-      i,
-      lineNumWidth,
-      state.columnWidths,
+      row, columns, i, lineNumWidth, state.columnWidths,
       i === state.selectedRowIndex,
+      isExpanded,
+      parsedLine,
       matchedCells as Set<string> | undefined,
+      handleToggle,
       handleRowClick,
       handleRowDblClick,
       handleCellClick,
     );
     rowEl.style.position = "absolute";
-    rowEl.style.top = `${computeRowTop(i, ROW_HEIGHT)}px`;
+    rowEl.style.top = `${computeRowTopVar(i, ROW_HEIGHT, EXPANSION_HEIGHT, expandedIndices)}px`;
     rowEl.style.minWidth = `${cachedGridWidth}px`;
-    rowEl.style.height = `${ROW_HEIGHT}px`;
     viewport.appendChild(rowEl);
   }
 }
@@ -180,11 +188,15 @@ scrollContainer.addEventListener("scroll", () => {
 }, { passive: true });
 
 // --- Event Handlers ---
+function handleToggle(index: number): void {
+  store.dispatch({ type: "toggleRowExpanded", index });
+  lastRenderedRange = { start: -1, end: -1 };
+  renderVisibleRows();
+}
+
 function handleRowClick(index: number): void {
   store.dispatch({ type: "selectRow", index });
-  store.dispatch({ type: "setDetailOpen", open: true });
   renderVisibleRows();
-  updateDetailPanel();
 }
 
 function handleRowDblClick(lineNumber: number): void {
@@ -203,6 +215,7 @@ function handleSort(key: string): void {
   } else {
     store.dispatch({ type: "setSort", column: key, asc: true });
   }
+  store.dispatch({ type: "collapseAllRows" });
   recomputeDisplayedRows();
   store.dispatch({ type: "selectRow", index: -1 });
   renderAll();
@@ -217,6 +230,7 @@ searchInput.addEventListener("input", () => {
     const query = searchInput.value.trim();
     store.dispatch({ type: "setSearch", query });
     store.dispatch({ type: "selectRow", index: -1 });
+    store.dispatch({ type: "collapseAllRows" });
     recomputeDisplayedRows();
     renderAll();
   }, SEARCH_DEBOUNCE_MS);
@@ -226,6 +240,7 @@ searchClear.addEventListener("click", () => {
   searchInput.value = "";
   store.dispatch({ type: "setSearch", query: "" });
   store.dispatch({ type: "selectRow", index: -1 });
+  store.dispatch({ type: "collapseAllRows" });
   recomputeDisplayedRows();
   renderAll();
   searchInput.focus();
@@ -238,24 +253,38 @@ gridEl.addEventListener("keydown", (e: KeyboardEvent) => {
   const rows = getDisplayedRows();
   const visibleRows = Math.floor(scrollContainer.clientHeight / ROW_HEIGHT);
 
+  // Handle ArrowRight/Left for expand/collapse
+  if (!meta && (e.key === "ArrowRight" || e.key === "ArrowLeft") && state.selectedRowIndex >= 0) {
+    if (e.key === "ArrowRight" && !state.expandedRows.has(state.selectedRowIndex)) {
+      handleToggle(state.selectedRowIndex);
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "ArrowLeft" && state.expandedRows.has(state.selectedRowIndex)) {
+      handleToggle(state.selectedRowIndex);
+      e.preventDefault();
+      return;
+    }
+  }
+
   const handled = handleKeydown(e.key, meta, {
     rowCount: rows.length,
     selectedIndex: state.selectedRowIndex,
     visibleRowCount: visibleRows,
-    detailOpen: state.detailOpen,
+    detailOpen: false,
     onSelect: (index: number) => {
       store.dispatch({ type: "selectRow", index });
-      scrollContainer.scrollTop = computeScrollTopForIndex(
+      const expandedIndices = getExpandedIndicesSorted();
+      scrollContainer.scrollTop = computeRowTopVar(
         Math.max(0, index - Math.floor(visibleRows / 2)),
-        ROW_HEIGHT,
+        ROW_HEIGHT, EXPANSION_HEIGHT, expandedIndices,
       );
       renderVisibleRows();
-      updateDetailPanel();
     },
-    onToggleDetail: (open: boolean) => {
-      store.dispatch({ type: "setDetailOpen", open });
-      updateDetailVisibility();
-      if (!open) gridEl.focus();
+    onToggleDetail: () => {
+      if (state.selectedRowIndex >= 0) {
+        handleToggle(state.selectedRowIndex);
+      }
     },
     onFocusSearch: () => {
       searchInput.focus();
@@ -274,79 +303,6 @@ gridEl.addEventListener("keydown", (e: KeyboardEvent) => {
   }
 });
 
-// --- Detail Panel ---
-detailClose.addEventListener("click", () => {
-  store.dispatch({ type: "setDetailOpen", open: false });
-  updateDetailVisibility();
-  gridEl.focus();
-});
-
-detailCopy.addEventListener("click", () => {
-  const state = store.getState();
-  const rows = getDisplayedRows();
-  const row = state.selectedRowIndex >= 0 ? rows[state.selectedRowIndex] : undefined;
-  if (row) {
-    const json = getDetailRowJson(row, getColumns());
-    vscodeApi.postMessage({ type: "copyValue", value: json });
-    showCopiedTooltip();
-  }
-});
-
-function updateDetailPanel(): void {
-  const state = store.getState();
-  const rows = getDisplayedRows();
-  const row = state.selectedRowIndex >= 0 ? rows[state.selectedRowIndex] : undefined;
-
-  if (row && state.detailOpen) {
-    renderDetailContent(detailContent, detailTitle, row, getColumns());
-    detailPanel.classList.remove("hidden");
-    detailPanel.setAttribute("aria-hidden", "false");
-  }
-}
-
-function updateDetailVisibility(): void {
-  const state = store.getState();
-  if (state.detailOpen) {
-    const rows = getDisplayedRows();
-    const row = state.selectedRowIndex >= 0 ? rows[state.selectedRowIndex] : undefined;
-    if (row) {
-      renderDetailContent(detailContent, detailTitle, row, getColumns());
-    }
-    detailPanel.classList.remove("hidden");
-    detailPanel.setAttribute("aria-hidden", "false");
-  } else {
-    detailPanel.classList.add("hidden");
-    detailPanel.setAttribute("aria-hidden", "true");
-  }
-}
-
-// --- Detail Panel Resize ---
-let isResizing = false;
-let startY = 0;
-let startHeight = 0;
-
-resizeHandle.addEventListener("mousedown", (e: MouseEvent) => {
-  isResizing = true;
-  startY = e.clientY;
-  startHeight = detailPanel.offsetHeight;
-  document.body.classList.add("resizing");
-  e.preventDefault();
-});
-
-document.addEventListener("mousemove", (e: MouseEvent) => {
-  if (!isResizing) return;
-  const delta = startY - e.clientY;
-  const newHeight = Math.max(100, Math.min(window.innerHeight * 0.6, startHeight + delta));
-  detailPanel.style.height = `${newHeight}px`;
-});
-
-document.addEventListener("mouseup", () => {
-  if (isResizing) {
-    isResizing = false;
-    document.body.classList.remove("resizing");
-  }
-});
-
 // --- Rendering ---
 function renderAll(): void {
   const state = store.getState();
@@ -356,7 +312,6 @@ function renderAll(): void {
   if (!data || data.rows.length === 0) {
     showEmptyState(emptyState);
     gridEl.classList.add("hidden");
-    detailPanel.classList.add("hidden");
     statusEl.textContent = "";
     searchCount.textContent = "";
     return;
@@ -366,7 +321,6 @@ function renderAll(): void {
   hideLoading(loadingState);
   gridEl.classList.remove("hidden");
 
-  // Auto-fit column widths from content, preserving user-resized widths
   const autoWidths = autoFitColumnWidths(data.rows, data.columns);
   for (const [key, width] of Object.entries(autoWidths)) {
     if (!(key in state.columnWidths)) {
@@ -402,8 +356,6 @@ function renderAll(): void {
   } else {
     searchCount.textContent = "";
   }
-
-  updateDetailVisibility();
 }
 
 // --- "Copied" tooltip ---
@@ -424,6 +376,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebviewMessage>) => {
   switch (msg.type) {
     case "update":
       hideLoading(loadingState);
+      currentParsedLines = msg.parsedLines;
       store.dispatch({ type: "setData", data: msg.data });
       recomputeDisplayedRows();
 
@@ -436,6 +389,7 @@ window.addEventListener("message", (event: MessageEvent<ToWebviewMessage>) => {
       renderAll();
       break;
     case "clear":
+      currentParsedLines = [];
       store.dispatch({ type: "setData", data: { columns: [], rows: [], totalLines: 0, errorCount: 0 } });
       renderAll();
       break;
@@ -455,7 +409,7 @@ store.subscribe(() => {
     sortAsc: state.sortAsc,
     searchQuery: state.searchQuery,
     columnWidths: state.columnWidths,
-    detailOpen: state.detailOpen,
+    detailOpen: false,
   });
 });
 

@@ -54,7 +54,7 @@ export type SearchResult = {
 };
 
 export type ToWebviewMessage =
-  | { readonly type: "update"; readonly data: TableData }
+  | { readonly type: "update"; readonly data: TableData; readonly parsedLines: readonly ParsedLine[] }
   | { readonly type: "clear" }
   | { readonly type: "searchResult"; readonly data: SearchResult }
   | { readonly type: "loading"; readonly fileName: string; readonly lineCount: number };

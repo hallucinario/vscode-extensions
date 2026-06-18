@@ -132,3 +132,69 @@ describe("computeScrollTopForIndex", () => {
     expect(computeScrollTopForIndex(50, 28)).toBe(1400);
   });
 });
+
+// --- Variable-height virtual scroll (for expandable rows) ---
+
+describe("computeRowTopVar", () => {
+  it("returns index * rowHeight when no expanded rows", async () => {
+    const { computeRowTopVar } = await import("./virtualScroll.js");
+    expect(computeRowTopVar(5, 28, 200, [])).toBe(140);
+  });
+
+  it("adds expansionHeight for each expanded row before index", async () => {
+    const { computeRowTopVar } = await import("./virtualScroll.js");
+    expect(computeRowTopVar(5, 28, 200, [2])).toBe(140 + 200);
+  });
+
+  it("does not count the row itself in offset (expansion is below the summary)", async () => {
+    const { computeRowTopVar } = await import("./virtualScroll.js");
+    expect(computeRowTopVar(2, 28, 200, [2])).toBe(56);
+  });
+
+  it("handles multiple expanded rows", async () => {
+    const { computeRowTopVar } = await import("./virtualScroll.js");
+    expect(computeRowTopVar(5, 28, 200, [1, 3])).toBe(140 + 400);
+  });
+});
+
+describe("computeRowHeight", () => {
+  it("returns rowHeight for collapsed row", async () => {
+    const { computeRowHeight } = await import("./virtualScroll.js");
+    expect(computeRowHeight(5, 28, 200, new Set())).toBe(28);
+  });
+
+  it("returns rowHeight + expansionHeight for expanded row", async () => {
+    const { computeRowHeight } = await import("./virtualScroll.js");
+    expect(computeRowHeight(5, 28, 200, new Set([5]))).toBe(228);
+  });
+});
+
+describe("computeSentinelHeightVar", () => {
+  it("includes expansion heights", async () => {
+    const { computeSentinelHeightVar } = await import("./virtualScroll.js");
+    expect(computeSentinelHeightVar(100, 28, 200, 2)).toBe(100 * 28 + 2 * 200);
+  });
+
+  it("returns base height when no expansions", async () => {
+    const { computeSentinelHeightVar } = await import("./virtualScroll.js");
+    expect(computeSentinelHeightVar(100, 28, 200, 0)).toBe(2800);
+  });
+});
+
+describe("findRowAtScrollTop", () => {
+  it("returns index 0 at scrollTop 0", async () => {
+    const { findRowAtScrollTop } = await import("./virtualScroll.js");
+    expect(findRowAtScrollTop(0, 100, 28, 200, [])).toBe(0);
+  });
+
+  it("returns correct index with no expansions", async () => {
+    const { findRowAtScrollTop } = await import("./virtualScroll.js");
+    expect(findRowAtScrollTop(140, 100, 28, 200, [])).toBe(5);
+  });
+
+  it("accounts for expanded rows when finding index", async () => {
+    const { findRowAtScrollTop } = await import("./virtualScroll.js");
+    // Row 2 expanded: rows 0-2 take 28*3 + 200 = 284px. scrollTop 284 = row 3
+    expect(findRowAtScrollTop(284, 100, 28, 200, [2])).toBe(3);
+  });
+});
